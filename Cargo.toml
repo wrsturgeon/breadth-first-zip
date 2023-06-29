@@ -1,0 +1,15 @@
+[package]
+name = "bfzip"
+version = "0.1.0"
+authors = ["Will Sturgeon <willstrgn@gmail.com>"]
+edition = "2021"
+description = "Breadth-first exhaustive `zip` for repeatable iterators."
+license = "MPL-2.0"
+repository = "https://github.com/wrsturgeon/bfzip"
+build = "build.rs"
+
+[dependencies]
+bfzip-util = { path = "bfzip-util" }
+
+[dev-dependencies]
+quickcheck = ">=1.0.3"
