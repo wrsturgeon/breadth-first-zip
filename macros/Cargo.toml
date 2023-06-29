@@ -1,11 +1,11 @@
 [package]
-name = "bfzip-util"
+name = "breadth-first-zip-macros"
 version = "0.1.0"
 authors = ["Will Sturgeon <willstrgn@gmail.com>"]
 edition = "2021"
-description = "Breadth-first exhaustive `zip` for repeatable iterators."
+description = "Breadth-first `zip` guaranteeing a monotonically increasing sum of indices."
 license = "MPL-2.0"
-repository = "https://github.com/wrsturgeon/bfzip"
+repository = "https://github.com/wrsturgeon/breadth-first-zip"
 build = "build.rs"
 
 [lib]

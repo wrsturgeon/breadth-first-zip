@@ -16,7 +16,7 @@ const END_CHAR: u8 = b'Q';
 const TO_LOWERCASE: u8 = b'a' - b'A';
 
 #[proc_macro]
-pub fn implement_up_to(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
+pub fn implement(ts: proc_macro::TokenStream) -> proc_macro::TokenStream {
     match fallible(ts.into()) {
         Ok(ok) => ok,
         Err(e) => e.into_compile_error(),
@@ -39,10 +39,7 @@ fn fallible(ts: TokenStream) -> syn::Result<TokenStream> {
         a_good_start.generics.params = impl_generics(chars.clone())?;
         a_good_start.generics.where_clause = Some(where_clause(chars.clone())?);
         a_good_start.self_ty = Box::new(flat_tuple_type(chars.clone())?);
-        a_good_start.items = vec![
-            type_nested_equals(chars.clone())?,
-            fn_breadth_first_zip(chars.clone())?,
-        ];
+        a_good_start.items = vec![type_nested_equals(chars.clone())?, fn_breadth_first_zip()?];
         a_good_start.to_tokens(&mut out);
 
         // `Flatten` implementation
@@ -332,9 +329,8 @@ fn huge_nested_tuple(chars: RangeInclusive<u8>) -> syn::Result<syn::Type> {
     }))
 }
 
-#[allow(unused_mut, unused_variables)] // FIXME
 #[inline]
-fn fn_breadth_first_zip(mut chars: RangeInclusive<u8>) -> syn::Result<syn::ImplItem> {
+fn fn_breadth_first_zip() -> syn::Result<syn::ImplItem> {
     syn::parse2(quote! {
         #[inline(always)]
         #[must_use]

@@ -1,15 +1,17 @@
 [package]
-name = "bfzip"
+name = "breadth-first-zip"
 version = "0.1.0"
 authors = ["Will Sturgeon <willstrgn@gmail.com>"]
 edition = "2021"
-description = "Breadth-first exhaustive `zip` for repeatable iterators."
+description = "Breadth-first `zip` guaranteeing a monotonically increasing sum of indices."
 license = "MPL-2.0"
-repository = "https://github.com/wrsturgeon/bfzip"
+keywords = ["iterator", "breadth-first", "zip", "traverse", "traversal"]
+categories = ["algorithms", "data-structures", "mathematics", "no-std::no-alloc", "rust-patterns"]
+repository = "https://github.com/wrsturgeon/breadth-first-zip"
 build = "build.rs"
 
 [dependencies]
-bfzip-util = { path = "bfzip-util" }
+breadth-first-zip-macros = { path = "macros" }
 
 [dev-dependencies]
 quickcheck = ">=1.0.3"

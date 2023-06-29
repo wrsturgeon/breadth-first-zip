@@ -53,6 +53,7 @@ fn triples() {
 }
 
 mod qc {
+    #![allow(warnings)]
     use super::*;
 
     type A = usize;
@@ -61,21 +62,21 @@ mod qc {
 
     quickcheck::quickcheck! {
         fn prop_everything(va: Vec<A>, vb: Vec<B>, vc: Vec<C>, a0: A, b0: B, c0: C) -> bool {
-            let va = { let mut va = va; va.push(a0); va };
-            let vb = { let mut vb = vb; vb.push(b0); vb };
-            let vc = { let mut vc = vc; vc.push(c0); vc };
+            let va = { let mut va = va; va.push(a0); va.sort_unstable(); va.dedup(); va };
+            let vb = { let mut vb = vb; vb.push(b0); vb.sort_unstable(); vb.dedup(); vb };
+            let vc = { let mut vc = vc; vc.push(c0); vc.sort_unstable(); vc.dedup(); vc };
             let total_elements = va.len() * vb.len() * vc.len();
             let mut seen = ::std::collections::HashSet::new();
             let mut iter = (va.iter(), vb.iter(), vc.iter()).breadth_first_zip().unwrap();
             for _ in 0..total_elements {
-                let Some((a, b, c)) = iter.next() else { return false; };
-                if seen.contains(&(a, b, c)) { return false; }
+                let Some((a, b, c)) = iter.next() else { panic!("Returned `None` too soon"); return false; };
+                if seen.contains(&(a, b, c)) { panic!("Returned an element already seen"); return false; }
                 seen.insert((a, b, c));
-                if !va.contains(&a) { return false; }
-                if !vb.contains(&b) { return false; }
-                if !vc.contains(&c) { return false; }
+                if !va.contains(&a) { panic!("`a` not in `A`"); return false; }
+                if !vb.contains(&b) { panic!("`b` not in `B`"); return false; }
+                if !vc.contains(&c) { panic!("`c` not in `C`"); return false; }
             }
-            if iter.next().is_some() { return false; }
+            if iter.next().is_some() { panic!("Kept returning after should have returned `None`"); return false; }
             true
         }
     }

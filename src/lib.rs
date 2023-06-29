@@ -30,21 +30,33 @@
 )]
 #![allow(
     clippy::blanket_clippy_restriction_lints,
+    clippy::cognitive_complexity,
     clippy::expect_used,
     clippy::implicit_return,
+    clippy::inline_always,
     clippy::needless_borrowed_reference,
     clippy::panic,
     clippy::question_mark_used,
-    clippy::string_add
+    clippy::separated_literal_suffix,
+    clippy::string_add,
+    clippy::unwrap_used
 )]
-#![allow(unreachable_code)] // FIXME
 
 #[cfg(test)]
 mod test;
 
 /// End of a recursive implementation of a breadth-first exhaustive `zip`.
 #[derive(Clone)]
-pub struct BaseCase;
+pub struct BaseCase(bool);
+
+/// Index and value.
+#[derive(Clone, Debug)]
+struct Indexed<Type> {
+    /// Index.
+    index: usize,
+    /// Value.
+    value: Type,
+}
 
 /// Recursive implementation of a breadth-first exhaustive `zip`.
 #[derive(Clone)]
@@ -52,10 +64,14 @@ pub struct BreadthFirstZipped<Head: Iterator + Clone, Tail: BreadthFirst>
 where
     Head::Item: Clone,
 {
+    /// Enumerated iterator for this current "index" in the recursive scheme.
     head: ::core::iter::Enumerate<Head>,
+    /// Copy of the original iterator to allow rewinding later.
+    orig_head: ::core::iter::Enumerate<Head>,
+    /// Implementations for the rest of the list.
     tail: Tail,
-    orig_tail: Tail,
-    current: (usize, Head::Item),
+    /// Current value: we don't always advance every call.
+    current: Indexed<Head::Item>,
 }
 
 impl<Head: Iterator + Clone, Tail: BreadthFirst> BreadthFirstZipped<Head, Tail>
@@ -63,17 +79,21 @@ where
     Head::Item: Clone,
 {
     /// Initialize a new recursive node of a breadth-first zip implementation.
+    /// # Errors
+    /// If any iterator is empty.
     #[inline(always)]
-    #[must_use]
     pub fn new(head: Head, tail: Tail) -> Result<Self, &'static str> {
-        let mut head = head.enumerate();
+        #![allow(clippy::shadow_unrelated)]
+        let orig_head = head.enumerate();
+        let mut head = orig_head.clone();
         let current = head
             .next()
-            .ok_or("Tried to breadth-first zip an empty iterator")?;
+            .ok_or("Tried to breadth-first zip an empty iterator")
+            .map(|(index, value)| Indexed { index, value })?;
         Ok(Self {
             head,
-            tail: tail.clone(),
-            orig_tail: tail,
+            orig_head,
+            tail,
             current,
         })
     }
@@ -92,12 +112,12 @@ impl Flatten for () {
     type Flattened = Self;
     #[inline(always)]
     #[must_use]
-    fn flatten(self) -> Self::Flattened {
-        ()
-    }
+    fn flatten(self) -> Self::Flattened {}
 }
 
+/// Sealed traits.
 mod sealed {
+    /// Either `BaseCase` or `BreadthFirst<Whatever, ...>` eventually ending in `BaseCase` on the right-hand side.
     pub trait BreadthFirst {}
     impl BreadthFirst for super::BaseCase {}
     impl<Head: Iterator + Clone, Tail: super::BreadthFirst> BreadthFirst
@@ -110,19 +130,30 @@ mod sealed {
 
 /// Helper trait returning a nested list that will be turned into a flat list for a huge but finite range of tuple sizes.
 pub trait BreadthFirst: Clone + sealed::BreadthFirst {
+    /// Depth of recursion.
+    const DEPTH: usize;
     /// Output of `advance` if successful.
     type Advance: Flatten;
     /// Fallibly choose the next output.
     #[must_use]
     fn advance(&mut self, index_sum: usize) -> Option<Self::Advance>;
+    /// Rewind the iterator back to its starting point
+    fn rewind(&mut self);
 }
 
 impl BreadthFirst for BaseCase {
+    const DEPTH: usize = 0;
     type Advance = ();
     #[inline(always)]
     #[must_use]
     fn advance(&mut self, index_sum: usize) -> Option<Self::Advance> {
-        (index_sum == 0).then_some(())
+        (index_sum == 0 && self.0).then(|| {
+            self.0 = false;
+        })
+    }
+    #[inline(always)]
+    fn rewind(&mut self) {
+        self.0 = true;
     }
 }
 
@@ -131,21 +162,35 @@ where
     Head::Item: Clone,
     (Head::Item, Tail::Advance): Flatten,
 {
+    const DEPTH: usize = Tail::DEPTH + 1;
     type Advance = (Head::Item, Tail::Advance);
     #[inline(always)]
     #[must_use]
     fn advance(&mut self, index_sum: usize) -> Option<Self::Advance> {
-        self.tail
-            .advance(index_sum.checked_sub(self.current.0)?)
-            .map_or_else(
-                || {
-                    self.current = self.head.next()?;
-                    self.tail = self.orig_tail.clone();
-                    self.tail.advance(index_sum.checked_sub(self.current.0)?)
-                },
-                Some,
-            )
-            .map(|tail| (self.current.1.clone(), tail))
+        loop {
+            if let Some(tail) = self
+                .tail
+                .advance(index_sum.checked_sub(self.current.index)?)
+            {
+                return Some((self.current.value.clone(), tail));
+            }
+            self.current = (self.current.index < index_sum).then(|| {
+                self.head
+                    .next()
+                    .map(|(index, value)| Indexed { index, value })
+            })??;
+            self.tail.rewind();
+        }
+    }
+    #[inline(always)]
+    fn rewind(&mut self) {
+        self.head = self.orig_head.clone();
+        self.tail.rewind();
+        self.current = self
+            .head
+            .next()
+            .map(|(index, value)| Indexed { index, value })
+            .unwrap();
     }
 }
 
@@ -154,31 +199,31 @@ trait Unflatten {
     /// E.g. `BreadthFirstZipped<A, BreadthFirstZipped<B, BreadthFirstZipped<C, BaseCase>>>`, not `(A, B, C)`.
     type Unflattened: BreadthFirst;
     /// Unflatten a tuple like `(A, B, C)` to `BreadthFirstZipped<A, BreadthFirstZipped<B, BreadthFirstZipped<C, BaseCase>>>`.
-    #[must_use]
     fn unflatten(self) -> Result<Self::Unflattened, &'static str>;
 }
 
 impl Unflatten for () {
     type Unflattened = BaseCase;
     #[inline(always)]
-    #[must_use]
     fn unflatten(self) -> Result<Self::Unflattened, &'static str> {
-        Ok(BaseCase)
+        Ok(BaseCase(true))
     }
 }
 
-// TODO: the above is a bit wasteful--maybe lazily calculate the entire vector then save it for the second, third, ... times
-// but also note that this assumes pure functions
-
 /// Helper struct for a breadth-first zip: a counter controlling the maximum index sum of the internal recursive implementation.
-pub struct BreadthFirstManager<Bf: BreadthFirst>(Bf, usize);
+pub struct BreadthFirstManager<Tail: BreadthFirst> {
+    /// Recursive implementation.
+    tail: Tail,
+    /// "Global" counter to allow the maximum possible sum of indices.
+    index_sum: usize,
+}
 
-impl<Bf: BreadthFirst> BreadthFirstManager<Bf> {
-    /// Initialize a new breadth-first manager at an index sum of zero.
+impl<Tail: BreadthFirst> BreadthFirstManager<Tail> {
+    /// Initialize a new breadth-first algorithm.
     #[inline(always)]
     #[must_use]
-    pub const fn new(bf: Bf) -> Self {
-        Self(bf, 0)
+    pub const fn new(tail: Tail) -> Self {
+        Self { tail, index_sum: 0 }
     }
 }
 
@@ -187,30 +232,32 @@ pub trait BreadthFirstZip {
     /// Rearrangement of input into a nested tuple.
     type Nested: BreadthFirst;
     /// Lazy breadth-first exhaustive `zip` that guarantees a monotonically increasing sum of indices.
-    #[must_use]
+    /// # Errors
+    /// If any iterator is empty.
     fn breadth_first_zip(self) -> Result<BreadthFirstManager<Self::Nested>, &'static str>;
 }
 
 impl BreadthFirstZip for () {
     type Nested = BaseCase;
     #[inline(always)]
-    #[must_use]
     fn breadth_first_zip(self) -> Result<BreadthFirstManager<Self::Nested>, &'static str> {
-        Ok(BreadthFirstManager::new(BaseCase))
+        self.unflatten().map(BreadthFirstManager::new)
     }
 }
 
-impl<Bf: BreadthFirst> Iterator for BreadthFirstManager<Bf> {
-    type Item = <Bf::Advance as Flatten>::Flattened;
+#[allow(clippy::missing_trait_methods)]
+impl<Tail: BreadthFirst> Iterator for BreadthFirstManager<Tail> {
+    type Item = <Tail::Advance as Flatten>::Flattened;
     #[inline(always)]
     #[must_use]
     fn next(&mut self) -> Option<Self::Item> {
-        self.0
-            .advance(self.1)
+        self.tail
+            .advance(self.index_sum)
             .map_or_else(
                 || {
-                    self.1 = self.1.checked_add(1)?;
-                    self.0.advance(self.1)
+                    self.index_sum = self.index_sum.checked_add(1)?;
+                    self.tail.rewind();
+                    self.tail.advance(self.index_sum)
                 },
                 Some,
             )
@@ -218,4 +265,4 @@ impl<Bf: BreadthFirst> Iterator for BreadthFirstManager<Bf> {
     }
 }
 
-bfzip_util::implement_up_to!(); // Implement traits for (A,), (A, B), (A, B, C), (A, B, C, D), ...
+breadth_first_zip_macros::implement!(); // Implement traits for (A,), (A, B), (A, B, C), (A, B, C, D), ...
