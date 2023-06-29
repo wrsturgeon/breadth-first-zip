@@ -11,7 +11,7 @@ repository = "https://github.com/wrsturgeon/breadth-first-zip"
 build = "build.rs"
 
 [dependencies]
-breadth-first-zip-macros = { path = "macros" }
+breadth-first-zip-macros = ">=0.1.0"
 
 [dev-dependencies]
 quickcheck = ">=1.0.3"
