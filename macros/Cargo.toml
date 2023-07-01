@@ -1,6 +1,6 @@
 [package]
 name = "breadth-first-zip-macros"
-version = "0.1.0"
+version = "0.2.2"
 authors = ["Will Sturgeon <willstrgn@gmail.com>"]
 edition = "2021"
 description = "Breadth-first `zip` guaranteeing a monotonically increasing sum of indices."
